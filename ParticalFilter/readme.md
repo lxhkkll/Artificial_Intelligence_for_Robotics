@@ -7,4 +7,4 @@ Update the position after the move function.
 
 
 Prediction of the bearings(angle of the landmark from current position).
-![sense](./res/pf.jpg)
+![sense](./res/sense.jpg)
