@@ -1,4 +1,5 @@
 
-policy2D = [[' ' for row in range(5)] for col in range(6)]
+a = [1,1]
+b = [2,1]
 
-print policy2D
+print sum(a)
