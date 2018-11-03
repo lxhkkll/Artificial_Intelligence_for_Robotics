@@ -8,6 +8,7 @@ import copy
 import math
 import cubic_spline
 import seaborn
+from calc_polynomial import *
 
 # Parameter
 MAX_SPEED = 50.0 / 3.6  # 最大速度 [m/s]
@@ -31,115 +32,24 @@ KLAT = 1.0
 KLON = 1.0
 
 
-class quintic_polynomial:
-    def __init__(self, xs, vxs, axs, xe, vxe, axe, T):
-        # 计算五次多项式系数
-        self.xs = xs
-        self.vxs = vxs
-        self.axs = axs
-        self.xe = xe
-        self.vxe = vxe
-        self.axe = axe
-
-        self.a0 = xs
-        self.a1 = vxs
-        self.a2 = axs / 2.0
-
-        A = np.array([[T ** 3, T ** 4, T ** 5],
-                      [3 * T ** 2, 4 * T ** 3, 5 * T ** 4],
-                      [6 * T, 12 * T ** 2, 20 * T ** 3]])
-        b = np.array([xe - self.a0 - self.a1 * T - self.a2 * T ** 2,
-                      vxe - self.a1 - 2 * self.a2 * T,
-                      axe - 2 * self.a2])
-        x = np.linalg.solve(A, b)
-
-        self.a3 = x[0]
-        self.a4 = x[1]
-        self.a5 = x[2]
-
-    def calc_point(self, t):
-        xt = self.a0 + self.a1 * t + self.a2 * t ** 2 + \
-             self.a3 * t ** 3 + self.a4 * t ** 4 + self.a5 * t ** 5
-
-        return xt
-
-    def calc_first_derivative(self, t):
-        xt = self.a1 + 2 * self.a2 * t + \
-             3 * self.a3 * t ** 2 + 4 * self.a4 * t ** 3 + 5 * self.a5 * t ** 4
-
-        return xt
-
-    def calc_second_derivative(self, t):
-        xt = 2 * self.a2 + 6 * self.a3 * t + 12 * self.a4 * t ** 2 + 20 * self.a5 * t ** 3
-
-        return xt
-
-    def calc_third_derivative(self, t):
-        xt = 6 * self.a3 + 24 * self.a4 * t + 60 * self.a5 * t ** 2
-
-        return xt
-
-
-class quartic_polynomial:
-    def __init__(self, xs, vxs, axs, vxe, axe, T):
-        # 计算四次多项式系数
-        self.xs = xs
-        self.vxs = vxs
-        self.axs = axs
-        self.vxe = vxe
-        self.axe = axe
-
-        self.a0 = xs
-        self.a1 = vxs
-        self.a2 = axs / 2.0
-
-        A = np.array([[3 * T ** 2, 4 * T ** 3],
-                      [6 * T, 12 * T ** 2]])
-        b = np.array([vxe - self.a1 - 2 * self.a2 * T,
-                      axe - 2 * self.a2])
-        x = np.linalg.solve(A, b)
-
-        self.a3 = x[0]
-        self.a4 = x[1]
-
-    def calc_point(self, t):
-        xt = self.a0 + self.a1 * t + self.a2 * t ** 2 + \
-             self.a3 * t ** 3 + self.a4 * t ** 4
-
-        return xt
-
-    def calc_first_derivative(self, t):
-        xt = self.a1 + 2 * self.a2 * t + \
-             3 * self.a3 * t ** 2 + 4 * self.a4 * t ** 3
-
-        return xt
-
-    def calc_second_derivative(self, t):
-        xt = 2 * self.a2 + 6 * self.a3 * t + 12 * self.a4 * t ** 2
-
-        return xt
-
-    def calc_third_derivative(self, t):
-        xt = 6 * self.a3 + 24 * self.a4 * t
-
-        return xt
-
-
 class Frenet_path:
     def __init__(self):
         self.t = []
+        # 横侧向 calc_frenet_paths
         self.d = []     #d
         self.d_d = []   #d'
         self.d_dd = []  #d''
         self.d_ddd = [] #d'''
+        # 纵向 calc_frenet_paths
         self.s = []
         self.s_d = []
         self.s_dd = []
         self.s_ddd = []
-        self.cd = 0.0
-        self.cv = 0.0
-        self.cf = 0.0
-
+        # 损失 calc_frenet_paths
+        self.cd = 0.0   # 横向损失
+        self.cv = 0.0   # 纵向损失
+        self.cf = 0.0   # 总损失
+        # 全局 calc_global_paths
         self.x = []
         self.y = []
         self.yaw = []
@@ -148,13 +58,22 @@ class Frenet_path:
 
 
 def calc_frenet_paths(c_speed, c_d, c_d_d, c_d_dd, s0):
+    """
+
+    :param c_speed: 当前车速度
+    :param c_d:     当前横向位移
+    :param c_d_d:   当前横向速度
+    :param c_d_dd:  当前横向加速度
+    :param s0:      当前所在位置
+    :return:
+    """
     frenet_paths = []
 
     # 采样，并对每一个目标配置生成轨迹
-    for di in np.arange(-MAX_ROAD_WIDTH, MAX_ROAD_WIDTH, D_ROAD_W):
+    for di in np.arange(-MAX_ROAD_WIDTH, MAX_ROAD_WIDTH, D_ROAD_W):  # 路宽(di 为目标的位置)
 
         # 横向动作规划
-        for Ti in np.arange(MINT, MAXT, DT):
+        for Ti in np.arange(MINT, MAXT, DT):                         # 时间
             fp = Frenet_path()
             # 计算出关于目标配置di，Ti的横向多项式
             lat_qp = quintic_polynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
@@ -193,6 +112,12 @@ def calc_frenet_paths(c_speed, c_d, c_d_d, c_d_dd, s0):
 
 
 def calc_global_paths(fplist, csp):
+    """
+    计算全局位置
+    :param fplist:
+    :param csp:
+    :return:
+    """
     for fp in fplist:
 
         # 计算全局位置
@@ -225,6 +150,12 @@ def calc_global_paths(fplist, csp):
 
 
 def check_collision(fp, ob):
+    """
+    静态障碍，检查碰撞
+    :param fp: 采样路径
+    :param ob: 障碍
+    :return:
+    """
     for i in range(len(ob[:, 0])):
         d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
              for (ix, iy) in zip(fp.x, fp.y)]
@@ -238,13 +169,19 @@ def check_collision(fp, ob):
 
 
 def check_paths(fplist, ob):
+    """
+    检查约束条件
+    :param fplist: 采样路径
+    :param ob: 障碍物
+    :return:
+    """
     okind = []
     for i in range(len(fplist)):
-        if any([v > MAX_SPEED for v in fplist[i].s_d]):  # 最大速度检查
+        if any([v > MAX_SPEED for v in fplist[i].s_d]):             # 最大速度检查
             continue
-        elif any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):  # 最大加速度检查
+        elif any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):     # 最大加速度检查
             continue
-        elif any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # 最大曲率检查
+        elif any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):    # 最大曲率检查
             continue
         elif not check_collision(fplist[i], ob):
             continue
@@ -271,6 +208,12 @@ def frenet_optimal_planning(csp, s0, c_speed, c_d, c_d_d, c_d_dd, ob):
 
 
 def generate_target_course(x, y):
+    """
+    生成全局路径信息
+    :param x:
+    :param y:
+    :return:
+    """
     csp = cubic_spline.Spline2D(x, y)
     s = np.arange(0, csp.s[-1], 0.1)
 
@@ -323,6 +266,8 @@ def main():
 
         plt.cla()
         plt.plot(tx, ty, "r")
+        plt.plot(tx, [i+15 for i in ty], "black", markersize=4)
+        plt.plot(tx, [i-15 for i in ty], "black", markersize=4)
         plt.plot(ob[:, 0], ob[:, 1], "ob")
         plt.plot(path.x[1:], path.y[1:], "-og")
         plt.plot(path.x[1], path.y[1], "vc")
