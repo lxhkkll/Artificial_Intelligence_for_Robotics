@@ -1,5 +1,9 @@
+from sympy import *
 
-a = [1,1]
-b = [2,1]
+x = Symbol('x')
+f = Function('f')
+x0 = Symbol('x0')
+y0 = Symbol('y0')
+f = sqrt((x0-x)**2 + (y0 - log(x+2) + 6 )**2)
 
-print sum(a)
+print(diff(f, x))

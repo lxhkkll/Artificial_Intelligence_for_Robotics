@@ -126,13 +126,18 @@ def run(robot, params, n=100, speed=1.0):
     int_cte = 0
     for i in range(2 * n):
         cte = robot.y
-        diff_cte = cte - prev_cte
+        diff_cte = (cte - prev_cte) / 0.1
         int_cte += cte
         prev_cte = cte
+
+        #           P                         D                       I
         steer = -params[0] * cte - params[1] * diff_cte - params[2] * int_cte
+
         robot.move(steer, speed)
+
         x_trajectory.append(robot.x)
         y_trajectory.append(robot.y)
+
         if i >= n:
             err += cte ** 2
     return x_trajectory, y_trajectory, err / n
@@ -150,11 +155,13 @@ def twiddle(tol=0.2):
 
     n = 0
     # TODO: twiddle loop here
+    speed = [1,2,3,4,5,60,7000,8,7,6,5,4,3,2,1]
+
     while sum(dp) > tol:
         for i in range(n_params):
             p[i] += dp[i]
             robot = make_robot()
-            _, _, err = run(robot, p)
+            _, _, err = run(robot, p, speed=speed[(i % len(speed))])
 
             if err < best_err:
                 best_err = err
@@ -188,3 +195,4 @@ n = len(x_trajectory)
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8))
 ax1.plot(x_trajectory, y_trajectory, 'g', label='Twiddle PID controller')
 ax1.plot(x_trajectory, np.zeros(n), 'r', label='reference')
+plt.show()
